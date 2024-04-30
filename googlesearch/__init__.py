@@ -87,7 +87,7 @@ def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False,
 
     escaped_term = term.replace(" ", "+")
 
-    # Proxy
+    # Proxy setup
     proxies = None
     if proxy:
         if proxy.startswith("https"):
@@ -101,8 +101,12 @@ def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False,
     # Set to store unique URLs
     unique_urls = set()
 
-    # Fetch until desired number of downloads is reached
-    while total_downloads < to_download:
+    # Counter for consecutive empty attempts
+    empty_attempts = 0
+    max_empty_attempts = 3  # Number of consecutive attempts without adding links allowed before breaking
+
+    # Fetch until desired number of downloads or too many empty attempts
+    while total_downloads < to_download and empty_attempts < max_empty_attempts:
         # Calculate number of results to fetch in this request
         remaining_downloads = to_download - total_downloads
         results_to_fetch = min(remaining_downloads, num_results)
@@ -114,6 +118,10 @@ def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False,
         # Parse
         soup = BeautifulSoup(resp.text, "html.parser")
         result_block = soup.find_all("div", attrs={"class": "g"})
+        
+        # Track whether a link was added in this attempt
+        link_added = False
+
         for result in result_block:
             # Find link, title, description
             link = result.find("a", href=True)
@@ -127,6 +135,8 @@ def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False,
                             print("Adding link: ", link["href"])
                             unique_urls.add(link["href"])  # Add URL to set of unique URLs
                             total_downloads += 1
+                            link_added = True  # Set flag that a link was added
+
                             if advanced:
                                 yield SearchResult(link["href"], title.text, description)
                             else:
@@ -136,8 +146,15 @@ def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False,
                             if total_downloads >= to_download:
                                 break  # Exit loop if reached desired number of downloads
 
-        # If desired number of downloads is reached, exit the loop
-        if total_downloads >= to_download:
+        # Increment or reset the empty_attempts counter
+        if link_added:
+            empty_attempts = 0  # Reset counter if a link was added
+        else:
+            empty_attempts += 1  # Increment counter if no links were added
+
+        # If consecutive empty attempts threshold is reached, break the loop
+        if empty_attempts >= max_empty_attempts:
+            print("Too many consecutive attempts without finding links. Exiting...")
             break
 
         # Wait for specified interval before next request

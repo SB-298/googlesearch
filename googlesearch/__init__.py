@@ -163,7 +163,7 @@ def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False,
         if consecutive_no_downloads >= 3:
             print("No consistent results found for 3 attempts in a row, stopping.")
             break
-        print("Current no consecutive downloads: " + consecutive_no_downloads)
+        
         # Wait for specified interval before next request
         print("Sleeping...")
         sleep(sleep_interval)

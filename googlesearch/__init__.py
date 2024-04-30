@@ -84,6 +84,9 @@ def url_contains_domain(url, domain_list):
 
 def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False, sleep_interval=0, timeout=5, filetype="pdf", whitelist=["gov"], to_download=20):
     """Search the Google search engine for desired file types from specific domains"""
+    import requests
+    from bs4 import BeautifulSoup
+    from time import sleep
 
     escaped_term = term.replace(" ", "+")
 
@@ -97,21 +100,32 @@ def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False,
 
     # Track total downloads obtained so far
     total_downloads = 0
-
     # Set to store unique URLs
     unique_urls = set()
-
-    # Fetch until desired number of downloads is reached
+    # Counter to track the number of attempts made
+    attempt_count = 0
+    
+    # Fetch until desired number of downloads is reached or max attempts reached
     while total_downloads < to_download:
+        # Check if max attempts reached
+        if attempt_count >= 5:
+            print("Number of max attempts reached. No new files found.")
+            break
+
         # Calculate number of results to fetch in this request
         remaining_downloads = to_download - total_downloads
         results_to_fetch = min(remaining_downloads, num_results)
 
         # Send request
-        print("Sending Request")
-        resp = _req(escaped_term, results_to_fetch, lang, total_downloads, proxies, timeout)
+        print("Sending request, attempt", attempt_count + 1)
+        resp = requests.get(
+            f"https://www.google.com/search?q={escaped_term}+filetype:{filetype}",
+            params={"start": total_downloads * results_to_fetch},
+            proxies=proxies,
+            timeout=timeout
+        )
 
-        # Parse
+        # Parse the response
         soup = BeautifulSoup(resp.text, "html.parser")
         result_block = soup.find_all("div", attrs={"class": "g"})
         for result in result_block:
@@ -123,9 +137,9 @@ def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False,
                 description = description_box.text
                 if link and title and description:
                     if link["href"].endswith(f'.{filetype}') and url_contains_domain(link["href"], whitelist):
-                        if link["href"] not in unique_urls:  # Check if URL is unique
+                        if link["href"] not in unique_urls:
                             print("Adding link: ", link["href"])
-                            unique_urls.add(link["href"])  # Add URL to set of unique URLs
+                            unique_urls.add(link["href"])
                             total_downloads += 1
                             if advanced:
                                 yield SearchResult(link["href"], title.text, description)
@@ -136,6 +150,9 @@ def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False,
                             if total_downloads >= to_download:
                                 break  # Exit loop if reached desired number of downloads
 
+        # Increment the attempt counter
+        attempt_count += 1
+
         # If desired number of downloads is reached, exit the loop
         if total_downloads >= to_download:
             break
@@ -143,6 +160,7 @@ def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False,
         # Wait for specified interval before next request
         print("Sleeping...")
         sleep(sleep_interval)
+
 
 
 

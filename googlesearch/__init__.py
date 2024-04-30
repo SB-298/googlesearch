@@ -84,7 +84,6 @@ def url_contains_domain(url, domain_list):
 
 def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False, sleep_interval=0, timeout=5, filetype="pdf", whitelist=["gov"], to_download=20):
     """Search the Google search engine for desired file types from specific domains"""
-
     import requests
     from bs4 import BeautifulSoup
     from time import sleep
@@ -101,21 +100,24 @@ def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False,
 
     # Track total downloads obtained so far
     total_downloads = 0
-
     # Set to store unique URLs
     unique_urls = set()
-
-    # Counter for consecutive attempts with no new downloads
-    consecutive_no_downloads = 0
-
-    # Fetch until desired number of downloads is reached or stop condition met
+    # Counter to track the number of attempts made
+    attempt_count = 0
+    
+    # Fetch until desired number of downloads is reached or max attempts reached
     while total_downloads < to_download:
+        # Check if max attempts reached
+        if attempt_count >= 5:
+            print("Number of max attempts reached. No new files found.")
+            break
+
         # Calculate number of results to fetch in this request
         remaining_downloads = to_download - total_downloads
         results_to_fetch = min(remaining_downloads, num_results)
 
         # Send request
-        print("Sending request")
+        print("Sending request, attempt", attempt_count + 1)
         resp = requests.get(
             f"https://www.google.com/search?q={escaped_term}+filetype:{filetype}",
             params={"start": total_downloads * results_to_fetch},
@@ -126,10 +128,6 @@ def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False,
         # Parse the response
         soup = BeautifulSoup(resp.text, "html.parser")
         result_block = soup.find_all("div", attrs={"class": "g"})
-        
-        # Initialize flag for new downloads in this attempt
-        new_downloads_in_attempt = False
-
         for result in result_block:
             # Find link, title, description
             link = result.find("a", href=True)
@@ -143,7 +141,6 @@ def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False,
                             print("Adding link: ", link["href"])
                             unique_urls.add(link["href"])
                             total_downloads += 1
-                            new_downloads_in_attempt = True  # Set flag to true when a new download is obtained
                             if advanced:
                                 yield SearchResult(link["href"], title.text, description)
                             else:
@@ -153,21 +150,16 @@ def search_desired(term, num_results=100, lang="en", proxy=None, advanced=False,
                             if total_downloads >= to_download:
                                 break  # Exit loop if reached desired number of downloads
 
-        # Update consecutive_no_downloads counter based on whether new downloads were obtained
-        if new_downloads_in_attempt:
-            consecutive_no_downloads = 0  # Reset counter if new downloads were obtained
-        else:
-            consecutive_no_downloads += 1  # Increment counter if no new downloads were obtained
+        # Increment the attempt counter
+        attempt_count += 1
 
-        # Check if consecutive_no_downloads counter reaches 3, indicating no consistent results
-        if consecutive_no_downloads >= 3:
-            print("No consistent results found for 3 attempts in a row, stopping.")
+        # If desired number of downloads is reached, exit the loop
+        if total_downloads >= to_download:
             break
-        
+
         # Wait for specified interval before next request
         print("Sleeping...")
         sleep(sleep_interval)
-
 
 
 
